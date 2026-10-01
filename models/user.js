@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true, lowercase: true },
+  email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['Admin', 'Employee'], default: 'Employee' }
+  role: { type: String, enum: ['Admin', 'HR', 'Employee'], default: 'Employee' },
+  companyId: { type: String, required: true } // <-- Add this field here
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

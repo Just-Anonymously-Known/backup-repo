@@ -13,7 +13,8 @@ const employeeSchema = new mongoose.Schema({
     Sick: { type: Number, default: 10 },
     Maternity: { type: Number, default: 90 },
     Casual: { type: Number, default: 5 }
-  }
+  },
+  companyId: { type: String, required: true }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Employee', employeeSchema);
