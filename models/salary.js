@@ -9,7 +9,8 @@ const salarySchema = new mongoose.Schema({
   employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true, unique: true },
   baseSalary: { type: Number, required: true },
   deductions: [deductionSchema],
-  paymentFrequency: { type: String, default: 'Monthly' }
+  paymentFrequency: { type: String, default: 'Monthly' },
+  companyId: { type: String, required: true }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Salary', salarySchema);

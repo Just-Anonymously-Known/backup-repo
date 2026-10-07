@@ -5,7 +5,7 @@ exports.sendMessage = async (req, res) => {
   try {
     const { recipient, isAnnouncement, subject, content, companyId, sender } = req.body;
 
-    const message = await Message.create({
+    const newMessage = await Message.create({
       sender: sender || req.user?._id || req.user?.id || null,
       recipient: recipient || null,
       isAnnouncement: isAnnouncement || false,
@@ -14,7 +14,7 @@ exports.sendMessage = async (req, res) => {
       companyId: companyId || req.user?.companyId || null
     });
 
-    res.status(201).json({ success: true, data: message });
+    res.status(201).json({ success: true, data: newMessage });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
