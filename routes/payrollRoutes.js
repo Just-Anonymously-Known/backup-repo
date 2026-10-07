@@ -7,7 +7,7 @@ const { verifyToken, isAdmin } = require('../middleware/auth');
 // Generate Payroll for an Employee
 router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   try {
-    const { employee, payPeriod } = req.body;
+    const { employee, payperiod, companyId } = req.body;
 
     // Find the employee's salary configuration
     const salaryRecord = await Salary.findOne({ employee });
@@ -23,14 +23,15 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
     const netPay = grossPay - totalDeductions;
 
     const payroll = await Payroll.create({
-      employee,
-      payPeriod,
-      baseSalary,
-      totalDeductions,
-      grossPay,
-      netPay,
-      status: 'Draft'
-    });
+  companyId: companyId || req.user?.companyId,
+  employee,
+  payperiod: payperiod || req.body.payperiod,
+  baseSalary,
+  totalDeductions,
+  grossPay,
+  netPay,
+  status: req.body.status || "Draft" 
+});
 
     res.status(201).json({ success: true, message: 'Payroll generated successfully', data: payroll });
   } catch (error) {

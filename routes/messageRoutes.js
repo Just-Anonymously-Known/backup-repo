@@ -12,7 +12,7 @@ router.get('/', verifyToken, getMessages);
 // Dedicated route to message HR automatically
 router.post('/to-hr', verifyToken, async (req, res) => {
   try {
-    const { subject, content } = req.body;
+    const { subject, content, companyId } = req.body;
 
     if (!content || !subject) {
       return res.status(400).json({ success: false, error: 'Both subject and content are required' });
@@ -27,7 +27,8 @@ router.post('/to-hr', verifyToken, async (req, res) => {
       sender: req.user.id,
       recipient: hrUser._id,
       subject: subject,
-      content: content
+      content: content,
+      companyId: companyId || req.user.companyId
     });
 
     res.status(201).json({ 

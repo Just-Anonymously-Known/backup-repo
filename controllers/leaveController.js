@@ -4,7 +4,7 @@ const Employee = require('../models/employee');
 // Apply for leave with automated balance checking and deduction
 exports.applyLeave = async (req, res) => {
   try {
-    const { employee: employeeId, leaveType, startDate, endDate, reason } = req.body;
+    const { employee: employeeId, leaveType, startDate, endDate, reason, companyId } = req.body;
 
     // 1. Find the employee
     const employeeRecord = await Employee.findById(employeeId);
@@ -29,12 +29,13 @@ exports.applyLeave = async (req, res) => {
 
     // 4. Create the leave request
     const leave = await Leave.create({
-      employee: employeeId,
-      leaveType,
-      startDate,
-      endDate,
-      reason
-    });
+  employee: employeeId,
+  leaveType,
+  startDate,
+  endDate,
+  reason,
+  companyId: companyId || req.user?.companyId
+});
 
     // 5. Deduct from employee balance
     employeeRecord.leaveBalance[leaveType] -= diffDays;
@@ -53,7 +54,7 @@ exports.applyLeave = async (req, res) => {
 // Update leave status (Approve/Reject) with automatic balance refunding on rejection
 exports.updateLeaveStatus = async (req, res) => {
   try {
-    const { status, hrComment } = req.body;
+    const { status, hrComment, companyId } = req.body;
 
     if (!['Approved', 'Rejected'].includes(status)) {
       return res.status(400).json({ success: false, error: 'Invalid status. Use Approved or Rejected' });
@@ -81,8 +82,9 @@ exports.updateLeaveStatus = async (req, res) => {
     }
 
     leave.status = status;
-    leave.hrComment = hrComment || leave.hrComment;
-    await leave.save();
+leave.hrComment = hrComment || leave.hrComment;
+if (companyId) leave.companyId = companyId;
+await leave.save();
 
     res.status(200).json({ 
       success: true, 
