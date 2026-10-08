@@ -7,8 +7,8 @@ const jwt = require('jsonwebtoken');
 // Register user
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, role } = req.body;
-    
+    const { email, password, role, companyId } = req.body;
+
     let user = await User.findOne({ email });
     if (user) return res.status(400).json({ success: false, error: 'User already exists' });
 
@@ -18,7 +18,8 @@ router.post('/register', async (req, res) => {
     user = await User.create({
       email,
       password: hashedPassword,
-      role: role || 'Employee'
+      role: role || 'Employee',
+      companyId
     });
 
     res.status(201).json({ success: true, message: 'User registered successfully', data: user });
@@ -31,7 +32,7 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
+
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ success: false, error: 'Invalid credentials' });
 
@@ -50,4 +51,35 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// Add an employee (Admin only)
+router.post('/add-employee', async (req, res) => {
+  try {
+    const { email, password, role, companyId } = req.body;
+
+    let user = await User.findOne({ email });
+    if (user) return res.status(400).json({ success: false, error: 'User already exists' });
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    user = await User.create({
+      email,
+      password: hashedPassword,
+      role: role || 'Employee',
+      companyId
+    });
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Employee added successfully', 
+      data: { 
+        email: user.email, 
+        role: user.role, 
+        companyId: user.companyId 
+      } 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 module.exports = router;
