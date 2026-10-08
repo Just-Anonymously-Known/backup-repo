@@ -39,6 +39,7 @@ exports.applyLeave = async (req, res) => {
 
     // 5. Deduct from employee balance
     employeeRecord.leaveBalance[leaveType] -= diffDays;
+    employeeRecord.markModified('leaveBalance');
     await employeeRecord.save();
 
     res.status(201).json({
@@ -74,10 +75,11 @@ exports.updateLeaveStatus = async (req, res) => {
         const diffTime = Math.abs(end - start);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-        if (employeeRecord.leaveBalance[leave.leaveType] !== undefined) {
-          employeeRecord.leaveBalance[leave.leaveType] += diffDays;
-          await employeeRecord.save();
-        }
+       if (employeeRecord.leaveBalance[leave.leaveType] !== undefined) {
+      employeeRecord.leaveBalance[leave.leaveType] += diffDays;
+      employeeRecord.markModified('leaveBalance');
+      await employeeRecord.save();
+    }
       }
     }
 
