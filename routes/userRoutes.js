@@ -51,10 +51,22 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Add an employee (Admin only)
 router.post('/add-employee', async (req, res) => {
   try {
-    const { email, password, role, companyId } = req.body;
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'Not authorized, no token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secretkey');
+
+    if (decoded.role !== 'Admin') {
+      return res.status(403).json({ success: false, error: 'Access denied. Only admins can add employees.' });
+    }
+
+    const { name, email, password, role } = req.body;
+    const companyId = decoded.companyId;
 
     let user = await User.findOne({ email });
     if (user) return res.status(400).json({ success: false, error: 'User already exists' });
@@ -63,6 +75,7 @@ router.post('/add-employee', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     user = await User.create({
+      name, 
       email,
       password: hashedPassword,
       role: role || 'Employee',
@@ -73,6 +86,7 @@ router.post('/add-employee', async (req, res) => {
       success: true, 
       message: 'Employee added successfully', 
       data: { 
+        name: user.name, 
         email: user.email, 
         role: user.role, 
         companyId: user.companyId 
