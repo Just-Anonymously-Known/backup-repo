@@ -14,6 +14,7 @@ const app = express();
 // Middleware[span_3](start_span)[span_3](end_span)
 app.use(express.json());
 app.use(cors());
+app.use('/uploads', express.static('uploads'));
 
 // Import Routes[span_4](start_span)[span_4](end_span)
 const leaveRoutes = require('./routes/leaveRoutes');
