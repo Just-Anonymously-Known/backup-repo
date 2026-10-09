@@ -1,99 +1,47 @@
 const express = require('express');
 const router = express.Router();
+const { 
+  register, 
+  login, 
+  addEmployee, 
+  updateEmployee, 
+  getMe 
+} = require('../controllers/authController');
+
+// Routes map cleanly to controller functions
+router.post('/register', register);
+router.post('/login', login);
+router.post('/add-employee', addEmployee);
+router.put('/:id', updateEmployee);
+router.get('/me', getMe); // Answers Naheejat's question about /api/auth/me
+
+const upload = require('../middleware/upload');
+const { verifyToken } = require('../middleware/auth');
 const User = require('../models/user');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 
-// Register user
-router.post('/register', async (req, res) => {
+// Route to upload/update profile picture
+router.patch('/profile-image', verifyToken, upload.single('image'), async (req, res) => {
   try {
-    const { email, password, role, companyId } = req.body;
-
-    let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ success: false, error: 'User already exists' });
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    user = await User.create({
-      email,
-      password: hashedPassword,
-      role: role || 'Employee',
-      companyId
-    });
-
-    res.status(201).json({ success: true, message: 'User registered successfully', data: user });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Login user & generate token
-router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ success: false, error: 'Invalid credentials' });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ success: false, error: 'Invalid credentials' });
-
-    const token = jwt.sign(
-      { id: user._id, role: user.role, companyId: user.companyId },
-      process.env.JWT_SECRET || 'secretkey',
-      { expiresIn: '1d' }
-    );
-
-    res.status(200).json({ success: true, token });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-router.post('/add-employee', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, error: 'Not authorized, no token provided' });
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'Please upload an image file.' });
     }
 
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secretkey');
+    const imagePath = `/uploads/${req.file.filename}`;
 
-    if (decoded.role !== 'Admin') {
-      return res.status(403).json({ success: false, error: 'Access denied. Only admins can add employees.' });
-    }
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { profileImage: imagePath },
+      { new: true }
+    ).select('-password');
 
-    const { name, email, password, role } = req.body;
-    const companyId = decoded.companyId;
-
-    let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ success: false, error: 'User already exists' });
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    user = await User.create({
-      name, 
-      email,
-      password: hashedPassword,
-      role: role || 'Employee',
-      companyId
-    });
-
-    res.status(201).json({ 
-      success: true, 
-      message: 'Employee added successfully', 
-      data: { 
-        name: user.name, 
-        email: user.email, 
-        role: user.role, 
-        companyId: user.companyId 
-      } 
+    res.status(200).json({
+      success: true,
+      message: 'Profile image updated successfully',
+      data: updatedUser
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 module.exports = router;

@@ -1,5 +1,5 @@
 const Leave = require('../models/leave');
-const Employee = require('../models/employee');
+const Employee = require('../models/user'); // Assuming Employee model is now part of User model
 
 // Apply for leave with automated balance checking and deduction
 exports.applyLeave = async (req, res) => {
