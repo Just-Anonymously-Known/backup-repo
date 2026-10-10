@@ -3,18 +3,19 @@ const Message = require('../models/Message');
 // Send a message or announcement
 exports.sendMessage = async (req, res) => {
   try {
-    const { recipient, isAnnouncement, subject, content, companyId, sender } = req.body;
+    const { recipient, isAnnouncement, subject, content, companyId } = req.body;
 
+    // Ensure the sender is always the currently authenticated user for security
     const newMessage = await Message.create({
-      sender: sender || req.user?._id || req.user?.id || null,
+      sender: req.user.id,
       recipient: recipient || null,
       isAnnouncement: isAnnouncement || false,
       subject,
       content,
-      companyId: companyId || req.user?.companyId || null
+      companyId: companyId || req.user.companyId
     });
 
-    res.status(201).json({ success: true, data: newMessage });
+    res.status(201).json({ success: true, message: 'Message sent successfully', data: newMessage });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

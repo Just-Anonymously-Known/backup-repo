@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const payrollSchema = new mongoose.Schema({
-  employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+  employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   payperiod: { type: String, required: true },
   baseSalary: { type: Number, required: true },
   totalDeductions: { type: Number, required: true },

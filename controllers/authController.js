@@ -1,4 +1,5 @@
 const User = require('../models/user');
+const Salary = require('../models/salary'); // 1. REQUIRE THE SALARY MODEL AT THE TOP
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -155,7 +156,7 @@ exports.updateEmployee = async (req, res) => {
   }
 };
 
-// 5. Get Current Logged-in User Profile (/api/auth/me)
+// 5. Get Current Logged-in User Profile & Salary (/api/auth/me)
 exports.getMe = async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -171,7 +172,17 @@ exports.getMe = async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    res.status(200).json({ success: true, data: user });
+    // 2. FIND THEIR CORRESPONDING SALARY RECORD
+    const salaryRecord = await Salary.findOne({ employee: user._id });
+
+    // 3. RETURN BOTH COMBINED SO MAKAN GETS PROFILE & SALARY IN ONE GO
+    res.status(200).json({ 
+      success: true, 
+      data: {
+        ...user.toObject(),
+        salary: salaryRecord || null 
+      } 
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

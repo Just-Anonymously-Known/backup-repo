@@ -30,6 +30,19 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// Get salary for the currently logged-in employee (Self-service for mobile)
+router.get('/me', verifyToken, async (req, res) => {
+  try {
+    const salary = await Salary.findOne({ employee: req.user.id }).populate('employee');
+    if (!salary) {
+      return res.status(404).json({ success: false, error: 'Salary record not found' });
+    }
+    res.status(200).json({ success: true, data: salary });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get salary by employee ID
 router.get('/:employeeId', verifyToken, async (req, res) => {
   try {
