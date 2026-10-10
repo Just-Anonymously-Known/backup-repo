@@ -17,8 +17,8 @@ const seedAdmin = async () => {
 
     const users = [
       {
-        name: 'Naheejat (Web Admin)',
-        email: 'naheejat@techcrush.com',
+        name: 'Najeehat (Web Admin)',
+        email: 'najeehat@techcrush.com',
         password: hashedPassword,
         role: 'Admin',
         companyId: 'TechCrush',
