@@ -26,13 +26,13 @@ exports.applyLeave = async (req, res) => {
         error: `Insufficient leave balance. Requested ${diffDays} days, but only ${currentBalance} days remaining for ${leaveType}.`
       });
     }
-
-    // 4. Create the leave request
-    const leave = await Leave.create({
+// 4. Create the leave request
+const leave = await Leave.create({
   employee: employeeId,
   leaveType,
   startDate,
   endDate,
+  totalDays: diffDays, 
   reason,
   companyId: companyId || req.user?.companyId
 });
