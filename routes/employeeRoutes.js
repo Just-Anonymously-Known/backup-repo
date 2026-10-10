@@ -16,11 +16,35 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
-// Create a new employee (Admin only)
+// Create a new employee and their initial salary structure (Admin only)
 router.post('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const employee = await User.create({ ...req.body, role: 'Employee', companyId: req.user.companyId });
-    res.status(201).json({ success: true, data: employee });
+    // 1. Extract salary fields from req.body so they don't pollute the User model if it doesn't expect them
+    const { baseSalary, paymentFrequency, deductions, password, ...userData } = req.body;
+
+    // 2. Create the Employee User record
+    const employee = await User.create({ 
+      ...userData, 
+      password: password || 'DefaultPassword123',
+      role: 'Employee', 
+      companyId: req.user.companyId 
+    });
+
+    // 3. Automatically create their initial Salary record if baseSalary is provided
+    if (baseSalary) {
+      await Salary.create({
+        employee: employee._id,
+        baseSalary,
+        paymentFrequency: paymentFrequency || 'Monthly',
+        deductions: deductions || []
+      });
+    }
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Employee and salary structure created successfully', 
+      data: employee 
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
