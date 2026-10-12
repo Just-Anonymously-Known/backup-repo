@@ -41,4 +41,28 @@ router.post('/to-hr', verifyToken, async (req, res) => {
   }
 });
 
+// Dedicated announcement route to match frontend expectation (/api/messages/announcements)
+router.post('/announcements', verifyToken, async (req, res) => {
+  try {
+    const { subject, content, companyId } = req.body;
+
+    const newAnnouncement = await Message.create({
+      sender: req.user.id,
+      recipient: null,
+      isAnnouncement: true,
+      subject: subject || 'Announcement',
+      content,
+      companyId: companyId || req.user.companyId
+    });
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Announcement sent successfully', 
+      data: newAnnouncement 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
