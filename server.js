@@ -36,17 +36,22 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/salary', salaryRoutes);
 app.use('/api/payroll', payrollRoutes);
 
-// Direct Announcement Route to match frontend expectation
 app.post('/api/announcements', verifyToken, async (req, res) => {
   try {
-    const { subject, content, companyId } = req.body;
+    const { subject, content, message, text, companyId } = req.body;
+
+    const announcementContent = content || message || text;
+
+    if (!announcementContent) {
+      return res.status(400).json({ success: false, error: 'Content or message body is required' });
+    }
 
     const newAnnouncement = await Message.create({
       sender: req.user.id,
       recipient: null,
       isAnnouncement: true,
       subject: subject || 'Announcement',
-      content,
+      content: announcementContent,
       companyId: companyId || req.user.companyId
     });
 
@@ -59,7 +64,6 @@ app.post('/api/announcements', verifyToken, async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
 // Test Route
 app.get('/', (req, res) => {
   res.send('HR Tech MVP Backend is running...');
