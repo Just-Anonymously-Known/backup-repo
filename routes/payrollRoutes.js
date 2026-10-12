@@ -52,4 +52,24 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// Update Payroll Payment Status (e.g., Mark as Paid)
+router.patch('/:id/payment', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const payroll = await Payroll.findByIdAndUpdate(
+      req.params.id,
+      { status: status || 'Paid' },
+      { new: true }
+    );
+
+    if (!payroll) {
+      return res.status(404).json({ success: false, error: 'Payroll record not found' });
+    }
+
+    res.status(200).json({ success: true, message: 'Payroll status updated successfully', data: payroll });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
