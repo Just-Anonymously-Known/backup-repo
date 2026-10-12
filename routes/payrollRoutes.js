@@ -29,7 +29,7 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   companyId: companyId || req.user?.companyId,
   employee,
   payperiod: payperiod || req.body.payperiod,
-  baseSalary,
+  baseSalary: salaryRecord.baseSalary,
   totalDeductions,
   grossPay,
   netPay,
