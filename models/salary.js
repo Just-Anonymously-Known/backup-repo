@@ -6,7 +6,7 @@ const deductionSchema = new mongoose.Schema({
 });
 
 const salarySchema = new mongoose.Schema({
-  employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true, unique: true },
+  employee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
   baseSalary: { type: Number, required: true },
   deductions: [deductionSchema],
   paymentFrequency: { type: String, default: 'Monthly' },
