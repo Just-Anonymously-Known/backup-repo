@@ -3,20 +3,20 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
 
-// Load environment variables[span_1](start_span)[span_1](end_span)
+// Load environment variables
 dotenv.config();
 
-// Connect to MongoDB[span_2](start_span)[span_2](end_span)
+// Connect to MongoDB
 connectDB();
 
 const app = express();
 
-// Middleware[span_3](start_span)[span_3](end_span)
+// Middleware
 app.use(express.json());
 app.use(cors());
 app.use('/uploads', express.static('uploads'));
 
-// Import Routes[span_4](start_span)[span_4](end_span)
+// Import Routes
 const leaveRoutes = require('./routes/leaveRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -24,7 +24,11 @@ const employeeRoutes = require('./routes/employeeRoutes');
 const salaryRoutes = require('./routes/salaryRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
 
-// Use Routes[span_5](start_span)[span_5](end_span)
+// Import models and middleware needed for announcements
+const Message = require('./models/Message');
+const { verifyToken } = require('./middleware/auth');
+
+// Use Routes
 app.use('/api/leaves', leaveRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/users', userRoutes);
@@ -32,7 +36,31 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/salary', salaryRoutes);
 app.use('/api/payroll', payrollRoutes);
 
-// Test Route[span_6](start_span)[span_6](end_span)
+// Direct Announcement Route to match frontend expectation
+app.post('/api/announcements', verifyToken, async (req, res) => {
+  try {
+    const { subject, content, companyId } = req.body;
+
+    const newAnnouncement = await Message.create({
+      sender: req.user.id,
+      recipient: null,
+      isAnnouncement: true,
+      subject: subject || 'Announcement',
+      content,
+      companyId: companyId || req.user.companyId
+    });
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Announcement sent successfully', 
+      data: newAnnouncement 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Test Route
 app.get('/', (req, res) => {
   res.send('HR Tech MVP Backend is running...');
 });
