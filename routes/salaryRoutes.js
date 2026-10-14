@@ -46,8 +46,22 @@ router.get('/me', verifyToken, async (req, res) => {
 // Get salary by employee ID
 router.get('/:employeeId', verifyToken, async (req, res) => {
   try {
-    const salary = await Salary.findOne({ employee: req.params.employeeId }).populate('employee');
-    if (!salary) return res.status(404).json({ success: false, error: 'Salary record not found' });
+    const { employeeId } = req.params;
+
+    let query = { employee: employeeId };
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      query = { 
+        $or: [
+          { employee: employeeId },
+          { employee: new mongoose.Types.ObjectId(employeeId) }
+        ]
+      };
+    }
+
+    const salary = await Salary.findOne(query).populate('employee');
+    if (!salary) {
+      return res.status(404).json({ success: false, error: 'Salary record not found' });
+    }
     res.status(200).json({ success: true, data: salary });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
