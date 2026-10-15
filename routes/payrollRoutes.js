@@ -72,4 +72,29 @@ router.patch('/:id/payment', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// Update/Patch payroll record by ID (Fixes Najeehat's frontend error)
+router.patch('/:id', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const updatedPayroll = await Payroll.findByIdAndUpdate(id, updates, { 
+      new: true, 
+      runValidators: true 
+    });
+
+    if (!updatedPayroll) {
+      return res.status(404).json({ success: false, error: 'Payroll record not found' });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Payroll updated successfully', 
+      data: updatedPayroll 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
