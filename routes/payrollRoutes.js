@@ -42,11 +42,18 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Get all payroll records
+// Get all payroll records with calculated pay details
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const payrolls = await Payroll.find().populate('employee');
-    res.status(200).json({ success: true, count: payrolls.length, data: payrolls });
+    const payrolls = await Payroll.find()
+      .populate('employee', 'name email department') // Populates employee details
+      .select('employee payperiod baseSalary totalDeductions grossPay netPay status createdAt'); // Explicitly selects netPay and other fields
+
+    res.status(200).json({ 
+      success: true, 
+      count: payrolls.length, 
+      data: payrolls 
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
