@@ -12,7 +12,12 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
     const companyId = req.user.companyId;
 
     if (!employee) {
-      const allSalaries = await Salary.find({ companyId });
+      let allSalaries = await Salary.find({ companyId });
+      if (!allSalaries || allSalaries.length === 0) {
+        // Fallback: if no salaries exist for companyId, fetch all salaries
+        allSalaries = await Salary.find({});
+      }
+
       if (!allSalaries || allSalaries.length === 0) {
         return res.status(404).json({ success: false, error: 'No salary records found for this company.' });
       }
@@ -26,7 +31,7 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
         const netPay = grossPay - totalDeductions;
 
         let payrollRecord = await Payroll.findOneAndUpdate(
-          { employee: sal.employee, companyId },
+          { employee: sal.employee },
           {
             payperiod: payperiod || 'Current',
             baseSalary: base,
@@ -59,7 +64,7 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
     const netPay = grossPay - totalDeductionsVal;
 
     let payrollRecord = await Payroll.findOneAndUpdate(
-      { employee, companyId },
+      { employee },
       {
         payperiod: payperiod || 'Current',
         baseSalary: base,
@@ -79,31 +84,63 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Get all employee payroll records
+// Get all employee payroll records (Auto-syncs new employees and missing salaries)
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
     const companyId = req.user.companyId;
 
-    const employees = await User.find({ companyId, role: { $ne: 'Admin' } }).lean();
-    const salaries = await Salary.find({ companyId }).lean();
-    const payrollRecords = await Payroll.find({ companyId }).lean();
+    // 1. Fetch all non-admin employees (with fallback)
+    let employees = await User.find({ companyId, role: { $ne: 'Admin' } }).lean();
+    if (!employees || employees.length <= 1) {
+      employees = await User.find({ role: { $ne: 'Admin' } }).lean();
+    }
+
+    // 2. Fetch all salaries and payrolls
+    let salaries = await Salary.find({ companyId }).lean();
+    if (!salaries || salaries.length === 0) {
+      salaries = await Salary.find({}).lean();
+    }
 
     const salaryMap = new Map();
     salaries.forEach(s => {
       if (s.employee) salaryMap.set(s.employee.toString(), s);
     });
 
+    // 3. AUTO-SYNC: If an employee does not have a Salary record yet, create a default one instantly!
+    for (const emp of employees) {
+      const empId = emp._id.toString();
+      if (!salaryMap.has(empId)) {
+        const defaultSalary = await Salary.create({
+          employee: emp._id,
+          companyId: emp.companyId || companyId,
+          baseSalary: 100000, // Default base salary for newly added employees
+          deductions: []
+        });
+        salaryMap.set(empId, defaultSalary.toObject());
+      }
+    }
+
+    // Re-fetch salaries & payrolls to ensure up-to-date mapping
+    const updatedSalaries = await Salary.find({}).lean();
+    const updatedPayrollRecords = await Payroll.find({}).lean();
+
+    const finalSalaryMap = new Map();
+    updatedSalaries.forEach(s => {
+      if (s.employee) finalSalaryMap.set(s.employee.toString(), s);
+    });
+
     const payrollMap = new Map();
-    payrollRecords.forEach(p => {
+    updatedPayrollRecords.forEach(p => {
       if (p.employee) payrollMap.set(p.employee.toString(), p);
     });
 
+    // 4. Map enriched data across all employees
     const enrichedData = employees.map(emp => {
       const empId = emp._id.toString();
-      const salaryMatch = salaryMap.get(empId);
+      const salaryMatch = finalSalaryMap.get(empId);
       const payrollMatch = payrollMap.get(empId);
 
-      const base = Number(salaryMatch?.baseSalary || payrollMatch?.baseSalary || 0);
+      const base = Number(salaryMatch?.baseSalary || payrollMatch?.baseSalary || 100000);
       
       const salaryDeductions = salaryMatch?.deductions && Array.isArray(salaryMatch.deductions) 
         ? salaryMatch.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) 
@@ -198,7 +235,7 @@ router.patch('/:id', verifyToken, isAdmin, async (req, res) => {
 
     if (!updatedPayroll) {
       updatedPayroll = await Payroll.findOneAndUpdate(
-        { employee: id, companyId: req.user.companyId },
+        { employee: id },
         updates,
         { new: true, upsert: true, runValidators: true }
       );
