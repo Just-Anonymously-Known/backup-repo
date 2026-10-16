@@ -9,16 +9,15 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   try {
     const { employee, payperiod, companyId } = req.body;
 
-   // Find the employee's salary configuration (auto-create a default if missing for smooth testing)
-    let salaryRecord = await Salary.findOne({ employee });
-    if (!salaryRecord) {
-      salaryRecord = await Salary.create({
-        employee,
-        baseSalary: 150000, // Default test base salary
-        deductions: [{ name: 'Tax', amount: 5000 }],
-        companyId: companyId || req.user?.companyId || 'TechCrush'
-      });
-    }
+   // Find the employee's salary configuration
+let salaryRecord = await Salary.findOne({ employee });
+
+if (!salaryRecord) {
+  return res.status(404).json({ 
+    success: false, 
+    error: "Salary configuration not found for this employee. Please assign a salary when creating the employee." 
+  });
+}
     
     // Calculate total deductions
     const totalDeductions = salaryRecord.deductions.reduce((acc, item) => acc + item.amount, 0);

@@ -32,13 +32,14 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
 
     // 3. Automatically create their initial Salary record if baseSalary is provided
     if (baseSalary) {
-      await Salary.create({
-        employee: employee._id,
-        baseSalary,
-        paymentFrequency: paymentFrequency || 'Monthly',
-        deductions: deductions || []
-      });
-    }
+  await Salary.create({
+    employee: employee._id,
+    baseSalary,
+    paymentFrequency: paymentFrequency || 'Monthly',
+    deductions: deductions || [],
+    companyId: req.user.companyId 
+  });
+}
 
     res.status(201).json({ 
       success: true, 
