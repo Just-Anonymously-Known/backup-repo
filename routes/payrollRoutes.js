@@ -1,186 +1,69 @@
 const express = require('express');
 const router = express.Router();
-const Payroll = require('../models/payroll');
+const mongoose = require('mongoose');
 const Salary = require('../models/salary');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 
-// Generate or Update Payroll for a single employee OR all employees in the company
-router.post('/generate', verifyToken, isAdmin, async (req, res) => {
+// Create or update salary structure for an employee
+router.post('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const { employee, payperiod, baseSalary, deductions, tax, extras } = req.body;
-    const companyId = req.user.companyId;
+    const { employee, baseSalary, deductions, paymentFrequency } = req.body;
 
-    // SCENARIO A: Bulk generate for ALL employees if no single employee ID is provided
-    if (!employee) {
-      const allSalaries = await Salary.find({ companyId });
-      if (!allSalaries || allSalaries.length === 0) {
-        return res.status(404).json({ success: false, error: 'No salary records found for this company.' });
-      }
-
-      const generatedPayrolls = [];
-
-      for (let sal of allSalaries) {
-        const base = Number(sal.baseSalary) || 0;
-        const totalDeductions = sal.deductions ? sal.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) : 0;
-        const grossPay = base;
-        const netPay = grossPay - totalDeductions;
-
-        let payrollRecord = await Payroll.findOneAndUpdate(
-          { employee: sal.employee, companyId },
-          {
-            payperiod: payperiod || 'Current',
-            baseSalary: base,
-            totalDeductions,
-            grossPay,
-            netPay,
-            status: 'Unpaid'
-          },
-          { upsert: true, new: true }
-        );
-        generatedPayrolls.push(payrollRecord);
-      }
-
-      return res.status(201).json({ 
-        success: true, 
-        message: `Payroll generated successfully for all ${generatedPayrolls.length} employees`, 
-        count: generatedPayrolls.length,
-        data: generatedPayrolls 
-      });
-    }
-
-    // SCENARIO B: Generate or Update for a SINGLE employee
     let salaryRecord = await Salary.findOne({ employee });
-    const base = Number(baseSalary) || Number(salaryRecord?.baseSalary) || 0;
-    const itemizedDeductions = deductions !== undefined ? Number(deductions) : (salaryRecord?.deductions ? salaryRecord.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) : 0);
-    const taxAmount = Number(tax) || 0;
-    const extraPay = Number(extras) || 0;
+    if (salaryRecord) {
+      salaryRecord.baseSalary = baseSalary || salaryRecord.baseSalary;
+      salaryRecord.deductions = deductions || salaryRecord.deductions;
+      salaryRecord.paymentFrequency = paymentFrequency || salaryRecord.paymentFrequency;
+      await salaryRecord.save();
+      return res.status(200).json({ success: true, message: 'Salary updated successfully', data: salaryRecord });
+    }
 
-    const grossPay = base + extraPay;
-    const totalDeductionsVal = itemizedDeductions + taxAmount;
-    const netPay = grossPay - totalDeductionsVal;
+    salaryRecord = await Salary.create({
+      employee,
+      baseSalary,
+      deductions,
+      paymentFrequency
+    });
 
-    let payrollRecord = await Payroll.findOneAndUpdate(
-      { employee, companyId },
-      {
-        payperiod: payperiod || 'Current',
-        baseSalary: base,
-        totalDeductions: totalDeductionsVal,
-        tax: taxAmount,
-        extras: extraPay,
-        grossPay,
-        netPay,
-        status: 'Unpaid'
-      },
-      { upsert: true, new: true }
-    );
-
-    return res.status(201).json({ success: true, message: 'Payroll generated successfully', data: payrollRecord });
+    res.status(201).json({ success: true, data: salaryRecord });
   } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Get all salary/payroll records ensuring saved modal deductions & net pay take absolute priority
-router.get('/', verifyToken, isAdmin, async (req, res) => {
+// Get salary for the currently logged-in employee (Self-service for mobile)
+router.get('/me', verifyToken, async (req, res) => {
   try {
-    const salaries = await Salary.find({ companyId: req.user.companyId })
-      .populate('employee', 'name email employeeId department jobTitle');
+    const salary = await Salary.findOne({ employee: req.user.id }).populate('employee');
+    if (!salary) {
+      return res.status(404).json({ success: false, error: 'Salary record not found' });
+    }
+    res.status(200).json({ success: true, data: salary });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
-    const payrollRecords = await Payroll.find({ companyId: req.user.companyId });
-    const payrollMap = new Map();
-    payrollRecords.forEach(p => payrollMap.set(p.employee.toString(), p));
+// Get salary by employee ID
+router.get('/:employeeId', verifyToken, async (req, res) => {
+  try {
+    const { employeeId } = req.params;
 
-    const enrichedData = salaries.map(sal => {
-      const empId = sal.employee?._id?.toString();
-      const payrollMatch = empId ? payrollMap.get(empId) : null;
-
-      const base = Number(sal.baseSalary || 0);
-      const salaryDeductions = sal.deductions ? sal.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) : 0;
-
-      // If a payroll record exists from modal saves, use its exact numbers; otherwise fallback to salary config
-      const grossPay = payrollMatch ? Number(payrollMatch.grossPay || 0) : base;
-      const totalDeductions = payrollMatch ? Number(payrollMatch.totalDeductions || 0) : salaryDeductions;
-      const netPay = payrollMatch ? Number(payrollMatch.netPay || 0) : (grossPay - totalDeductions);
-
-      return {
-        _id: payrollMatch?._id || sal._id,
-        employee: sal.employee,
-        baseSalary: netPay, // Reflects the exact Net Pay (after deductions) in the Current Salary column
-        rawBaseSalary: base,
-        grossPay,
-        totalDeductions,
-        netPay,
-        status: payrollMatch?.status || 'Unpaid'
+    let query = { employee: employeeId };
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      query = { 
+        $or: [
+          { employee: employeeId },
+          { employee: new mongoose.Types.ObjectId(employeeId) }
+        ]
       };
-    });
-
-    const summary = enrichedData.reduce((acc, curr) => {
-      acc.totalGross += Number(curr.grossPay || 0);
-      acc.totalDeductions += Number(curr.totalDeductions || 0);
-      acc.totalNet += Number(curr.netPay || 0);
-      return acc;
-    }, { totalGross: 0, totalDeductions: 0, totalNet: 0 });
-
-    res.status(200).json({
-      success: true,
-      count: enrichedData.length,
-      summary: {
-        employeeCount: enrichedData.length,
-        totalGrossPay: summary.totalGross,
-        totalDeductions: summary.totalDeductions,
-        totalNetPay: summary.totalNet
-      },
-      data: enrichedData
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Update Payroll Payment Status (e.g., Mark as Paid)
-router.patch('/:id/payment', verifyToken, isAdmin, async (req, res) => {
-  try {
-    const { status } = req.body;
-    const payroll = await Payroll.findByIdAndUpdate(
-      req.params.id,
-      { status: status || 'Paid' },
-      { new: true }
-    );
-
-    if (!payroll) {
-      return res.status(404).json({ success: false, error: 'Payroll record not found' });
     }
 
-    res.status(200).json({ success: true, message: 'Payroll status updated successfully', data: payroll });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Update or create payroll record by ID or create if missing (Fixes frontend modal save error)
-router.patch('/:id', verifyToken, isAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-
-    let updatedPayroll = await Payroll.findByIdAndUpdate(id, updates, { 
-      new: true, 
-      runValidators: true 
-    });
-
-    if (!updatedPayroll) {
-      updatedPayroll = await Payroll.findOneAndUpdate(
-        { employee: id, companyId: req.user.companyId },
-        updates,
-        { new: true, upsert: true, runValidators: true }
-      );
+    const salary = await Salary.findOne(query).populate('employee');
+    if (!salary) {
+      return res.status(404).json({ success: false, error: 'Salary record not found' });
     }
-
-    res.status(200).json({ 
-      success: true, 
-      message: 'Payroll saved successfully', 
-      data: updatedPayroll 
-    });
+    res.status(200).json({ success: true, data: salary });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
