@@ -80,7 +80,7 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Get all salary/payroll records with computed net pay for the dashboard
+// Get all salary/payroll records and map Net Pay to Current Salary for the dashboard table
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
     // 1. Fetch all salaries and populate employees so every employee appears in the table
@@ -110,7 +110,8 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
       return {
         _id: payrollMatch?._id || sal._id,
         employee: sal.employee,
-        baseSalary: base,
+        baseSalary: netPay, // Sets the table's "Current Salary" column to display the final calculated Net Pay
+        rawBaseSalary: base, // Preserves the raw updated base salary from salary configurations
         grossPay,
         totalDeductions,
         netPay,
