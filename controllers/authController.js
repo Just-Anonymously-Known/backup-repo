@@ -1,5 +1,5 @@
 const User = require('../models/user');
-const Salary = require('../models/salary'); // 1. REQUIRE THE SALARY MODEL AT THE TOP
+const Salary = require('../models/salary');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -57,64 +57,68 @@ exports.addEmployee = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access denied. Only admins can add employees.' });
     }
 
-   const { 
-  name, 
-  email, 
-  password, 
-  role, 
-  phone, 
-  dateOfBirth, 
-  gender, 
-  address,
-  employeeId,
-  department,
-  jobTitle,
-  employmentType,
-  startDate
-} = req.body;
+    const { 
+      name, 
+      email, 
+      password, 
+      role, 
+      phone, 
+      dateOfBirth, 
+      gender, 
+      address,
+      employeeId,
+      department,
+      jobTitle,
+      employmentType,
+      startDate
+    } = req.body;
     const companyId = decoded.companyId;
 
     let user = await User.findOne({ email });
     if (user) return res.status(400).json({ success: false, error: 'User already exists' });
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    // Use provided password or generate a reliable backend temporary password
+    const rawPassword = password && password.trim() !== '' ? password : Math.random().toString(36).slice(-8) + 'A1!';
 
-   user = await User.create({
-  name,
-  email,
-  password: hashedPassword,
-  role: role || 'Employee',
-  companyId,
-  phone: phone || '',
-  dateOfBirth: dateOfBirth || null,
-  gender: gender || '',
-  address: address || '',
-  employeeId: employeeId || '',
-  department: department || '',
-  jobTitle: jobTitle || '',
-  employmentType: employmentType || 'Full-Time',
-  startDate: startDate || Date.now()
-});
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(rawPassword, salt);
+
+    user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      role: role || 'Employee',
+      companyId,
+      phone: phone || '',
+      dateOfBirth: dateOfBirth || null,
+      gender: gender || '',
+      address: address || '',
+      employeeId: employeeId || '',
+      department: department || '',
+      jobTitle: jobTitle || '',
+      employmentType: employmentType || 'Full-Time',
+      startDate: startDate || Date.now()
+    });
 
     res.status(201).json({ 
       success: true, 
       message: 'Employee added successfully', 
+      temporaryPassword: rawPassword, // Sent to frontend modal to display to the admin
       data: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      companyId: user.companyId,
-      phone: user.phone,
-      address: user.address,
-      gender: user.gender,
-      employeeId: user.employeeId,
-      department: user.department,
-      jobTitle: user.jobTitle,
-      employmentType: user.employmentType,
-      startDate: user.startDate
-    }
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        companyId: user.companyId,
+        phone: user.phone,
+        address: user.address,
+        gender: user.gender,
+        employeeId: user.employeeId,
+        department: user.department,
+        jobTitle: user.jobTitle,
+        employmentType: user.employmentType,
+        startDate: user.startDate
+      }
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -172,10 +176,8 @@ exports.getMe = async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    // 2. FIND THEIR CORRESPONDING SALARY RECORD
     const salaryRecord = await Salary.findOne({ employee: user._id });
 
-    // 3. RETURN BOTH COMBINED SO MAKAN GETS PROFILE & SALARY IN ONE GO
     res.status(200).json({ 
       success: true, 
       data: {
