@@ -19,32 +19,32 @@ router.get('/', verifyToken, async (req, res) => {
 // Create a new employee and their initial salary structure (Admin only)
 router.post('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    // 1. Extract salary fields from req.body so they don't pollute the User model if it doesn't expect them
-    const { baseSalary, paymentFrequency, deductions, password, ...userData } = req.body;
+    // 1. Extract fields from req.body (allows employeeId to be manually typed from the form)
+    const { baseSalary, paymentFrequency, deductions, password, companyId, ...userData } = req.body;
 
-    // 2. Create the Employee User record
-    const employee = await User.create({ 
-      ...userData, 
+    // 2. Create the Employee User record using the manually typed employeeId from the form
+    const employee = await User.create({
+      ...userData,
       password: password || 'DefaultPassword123',
-      role: 'Employee', 
-      companyId: req.user.companyId 
+      role: 'Employee',
+      companyId: req.user.companyId // Securely auto-generated from the admin's token
     });
 
     // 3. Automatically create their initial Salary record if baseSalary is provided
     if (baseSalary) {
-  await Salary.create({
-    employee: employee._id,
-    baseSalary,
-    paymentFrequency: paymentFrequency || 'Monthly',
-    deductions: deductions || [],
-    companyId: req.user.companyId 
-  });
-}
+      await Salary.create({
+        employee: employee._id,
+        baseSalary,
+        paymentFrequency: paymentFrequency || 'Monthly',
+        deductions: deductions || [],
+        companyId: req.user.companyId
+      });
+    }
 
-    res.status(201).json({ 
-      success: true, 
-      message: 'Employee and salary structure created successfully', 
-      data: employee 
+    res.status(201).json({
+      success: true,
+      message: 'Employee and salary structure created successfully',
+      data: employee
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
