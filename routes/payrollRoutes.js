@@ -76,11 +76,11 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
 
     return res.status(201).json({ success: true, message: 'Payroll generated successfully', data: payrollRecord });
   } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Get all salary/payroll records and map Net Pay to Current Salary for the dashboard table
+// Get all salary/payroll records with proper deduction calculations for the dashboard
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
     // 1. Fetch all salaries and populate employees so every employee appears in the table
@@ -92,7 +92,7 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
     const payrollMap = new Map();
     payrollRecords.forEach(p => payrollMap.set(p.employee.toString(), p));
 
-    // 3. Map salaries to include calculated net pay/payroll data for frontend display
+    // 3. Map salaries to include calculated deductions, extras, and net pay
     const enrichedData = salaries.map(sal => {
       const empId = sal.employee?._id?.toString();
       const payrollMatch = empId ? payrollMap.get(empId) : null;
@@ -102,9 +102,10 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
       
       const extras = Number(payrollMatch?.extras || 0);
       const tax = Number(payrollMatch?.tax || 0);
+      const payrollDeductions = Number(payrollMatch?.totalDeductions || 0);
       
+      const totalDeductions = payrollDeductions > 0 ? payrollDeductions : (salaryDeductions + tax);
       const grossPay = payrollMatch?.grossPay || (base + extras);
-      const totalDeductions = payrollMatch?.totalDeductions || (salaryDeductions + tax);
       const netPay = payrollMatch?.netPay || (grossPay - totalDeductions);
 
       return {
