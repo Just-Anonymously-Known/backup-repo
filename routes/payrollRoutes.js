@@ -5,16 +5,17 @@ const Salary = require('../models/salary');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 
 // Generate Payroll for an Employee
+// Generate Payroll for a single employee OR all employees in the company
 router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   try {
     const { employee, payperiod, baseSalary, deductions, tax, extras } = req.body;
     const companyId = req.user.companyId;
 
-    // SCENARIO A: Generate for ALL employees in the company if no single employee ID is provided
+    // SCENARIO A: Bulk generate for ALL employees if no single employee ID is provided
     if (!employee) {
       const allSalaries = await Salary.find({ companyId });
       if (!allSalaries || allSalaries.length === 0) {
-        return res.status(404).json({ success: false, error: 'No salary records found for this company to generate payroll.' });
+        return res.status(404).json({ success: false, error: 'No salary records found for this company.' });
       }
 
       const generatedPayrolls = [];
@@ -47,7 +48,7 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
       });
     }
 
-    // SCENARIO B: Generate/Update for a SINGLE employee (your original logic)
+    // SCENARIO B: Generate/Update for a SINGLE employee
     const base = Number(baseSalary) || 0;
     const totalDeductions = Number(deductions) || 0;
     const taxAmount = Number(tax) || 0;
@@ -70,27 +71,37 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
       { upsert: true, new: true }
     );
 
-    res.status(201).json({ success: true, message: 'Payroll generated successfully', data: payrollRecord });
+    return res.status(201).json({ success: true, message: 'Payroll generated successfully', data: payrollRecord });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Update Payroll Payment Status (e.g., Mark as Paid)
-router.patch('/:id/payment', verifyToken, isAdmin, async (req, res) => {
+// Get all payroll records and calculated summary metrics for the dashboard
+router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const { status } = req.body;
-    const payroll = await Payroll.findByIdAndUpdate(
-      req.params.id,
-      { status: status || 'Paid' },
-      { new: true }
-    );
+    const payrolls = await Payroll.find({ companyId: req.user.companyId })
+      .populate('employee', 'name email employeeId department jobTitle');
 
-    if (!payroll) {
-      return res.status(404).json({ success: false, error: 'Payroll record not found' });
-    }
+    // Calculate overall summary metrics for the top card
+    const summary = payrolls.reduce((acc, curr) => {
+      acc.totalGross += Number(curr.grossPay || curr.baseSalary || 0);
+      acc.totalDeductions += Number(curr.totalDeductions || curr.tax || 0);
+      acc.totalNet += Number(curr.netPay || curr.baseSalary || 0);
+      return acc;
+    }, { totalGross: 0, totalDeductions: 0, totalNet: 0 });
 
-    res.status(200).json({ success: true, message: 'Payroll status updated successfully', data: payroll });
+    res.status(200).json({
+      success: true,
+      count: payrolls.length,
+      summary: {
+        employeeCount: payrolls.length,
+        totalGrossPay: summary.totalGross,
+        totalDeductions: summary.totalDeductions,
+        totalNetPay: summary.totalNet
+      },
+      data: payrolls
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
