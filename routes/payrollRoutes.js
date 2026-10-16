@@ -44,8 +44,8 @@ if (!salaryRecord) {
 // Get all payroll records with calculated pay details
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const payrolls = await Payroll.find()
-      .populate('employee', 'name email department') // Populates employee details
+    const payrolls = await Payroll.find({ companyId: req.user.companyId })
+      .populate('employee', 'name email department') 
       .select('employee payperiod baseSalary totalDeductions grossPay netPay status createdAt'); // Explicitly selects netPay and other fields
 
     res.status(200).json({ 
