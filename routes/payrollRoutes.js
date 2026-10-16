@@ -81,30 +81,33 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Get all payroll records and calculated summary metrics for the dashboard
+// Get all salary/payroll records for the company to display on the dashboard
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const payrolls = await Payroll.find({ companyId: req.user.companyId })
+    // Fetch all salary structures tied to this company so every employee appears
+    const salaries = await Salary.find({ companyId: req.user.companyId })
       .populate('employee', 'name email employeeId department jobTitle');
 
-    // Calculate overall summary metrics for the top card safely
-    const summary = payrolls.reduce((acc, curr) => {
-      acc.totalGross += Number(curr.grossPay || curr.baseSalary || 0);
-      acc.totalDeductions += Number(curr.totalDeductions || curr.tax || 0);
-      acc.totalNet += Number(curr.netPay || curr.baseSalary || 0);
+    // Calculate summary metrics based on the salary records
+    const summary = salaries.reduce((acc, curr) => {
+      const base = Number(curr.baseSalary || 0);
+      const deductions = curr.deductions ? curr.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) : 0;
+      acc.totalGross += base;
+      acc.totalDeductions += deductions;
+      acc.totalNet += (base - deductions);
       return acc;
     }, { totalGross: 0, totalDeductions: 0, totalNet: 0 });
 
     res.status(200).json({
       success: true,
-      count: payrolls.length,
+      count: salaries.length,
       summary: {
-        employeeCount: payrolls.length,
+        employeeCount: salaries.length,
         totalGrossPay: summary.totalGross,
         totalDeductions: summary.totalDeductions,
         totalNetPay: summary.totalNet
       },
-      data: payrolls
+      data: salaries
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
