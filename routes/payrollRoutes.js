@@ -41,17 +41,16 @@ if (!salaryRecord) {
   }
 });
 
-// Get all payroll records with calculated pay details
+// Get all salary/payroll records for the company
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const payrolls = await Payroll.find({ companyId: req.user.companyId })
-      .populate('employee', 'name email department') 
-      .select('employee payperiod baseSalary totalDeductions grossPay netPay status createdAt'); // Explicitly selects netPay and other fields
+    const salaries = await Salary.find({ companyId: req.user.companyId })
+      .populate('employee', 'name email employeeId department jobTitle');
 
-    res.status(200).json({ 
-      success: true, 
-      count: payrolls.length, 
-      data: payrolls 
+    res.status(200).json({
+      success: true,
+      count: salaries.length,
+      data: salaries
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
