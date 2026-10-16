@@ -65,9 +65,12 @@ router.get('/:id', verifyToken, async (req, res) => {
 
 router.patch('/:id', verifyToken, async (req, res) => {
   try {
+    const { baseSalary, paymentFrequency, deductions, ...updateData } = req.body;
+
+    // 1. Update the employee details
     const updatedEmployee = await User.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body }, // Automatically updates whatever fields Naheejat's frontend sends (phone, address, isActive, etc.)
+      { $set: updateData }, 
       { new: true, runValidators: true }
     ).select('-password');
 
@@ -75,7 +78,25 @@ router.patch('/:id', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Employee not found' });
     }
 
-    res.status(200).json({ success: true, message: 'Employee updated successfully', data: updatedEmployee });
+    // 2. Automatically save or update their salary record if baseSalary is provided
+    if (baseSalary) {
+      await Salary.findOneAndUpdate(
+        { employee: updatedEmployee._id },
+        {
+          baseSalary,
+          paymentFrequency: paymentFrequency || 'Monthly',
+          deductions: deductions || [],
+          companyId: updatedEmployee.companyId || req.user.companyId
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Employee and salary updated successfully', 
+      data: updatedEmployee 
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
