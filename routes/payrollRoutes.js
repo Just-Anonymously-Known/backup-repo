@@ -80,19 +80,16 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Get all salary/payroll records prioritizing saved Payroll calculations for the dashboard
+// Get all salary/payroll records ensuring saved modal deductions & net pay take absolute priority
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    // 1. Fetch all salaries so every employee appears in the table
     const salaries = await Salary.find({ companyId: req.user.companyId })
       .populate('employee', 'name email employeeId department jobTitle');
 
-    // 2. Fetch all saved Payroll calculation instances for this company
     const payrollRecords = await Payroll.find({ companyId: req.user.companyId });
     const payrollMap = new Map();
     payrollRecords.forEach(p => payrollMap.set(p.employee.toString(), p));
 
-    // 3. Map data, ensuring saved Payroll values (deductions, netPay) take absolute priority
     const enrichedData = salaries.map(sal => {
       const empId = sal.employee?._id?.toString();
       const payrollMatch = empId ? payrollMap.get(empId) : null;
@@ -100,10 +97,10 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
       const base = Number(sal.baseSalary || 0);
       const salaryDeductions = sal.deductions ? sal.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) : 0;
 
-      // If a payroll record was saved via modal, use its calculated/saved numbers!
-      const grossPay = Number(payrollMatch?.grossPay ?? (base + Number(payrollMatch?.extras || 0)));
-      const totalDeductions = Number(payrollMatch?.totalDeductions ?? (salaryDeductions + Number(payrollMatch?.tax || 0)));
-      const netPay = Number(payrollMatch?.netPay ?? (grossPay - totalDeductions));
+      // If a payroll record exists from modal saves, use its exact numbers; otherwise fallback to salary config
+      const grossPay = payrollMatch ? Number(payrollMatch.grossPay || 0) : base;
+      const totalDeductions = payrollMatch ? Number(payrollMatch.totalDeductions || 0) : salaryDeductions;
+      const netPay = payrollMatch ? Number(payrollMatch.netPay || 0) : (grossPay - totalDeductions);
 
       return {
         _id: payrollMatch?._id || sal._id,
@@ -117,7 +114,6 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
       };
     });
 
-    // 4. Calculate overall summary metrics accurately across all employees
     const summary = enrichedData.reduce((acc, curr) => {
       acc.totalGross += Number(curr.grossPay || 0);
       acc.totalDeductions += Number(curr.totalDeductions || 0);
