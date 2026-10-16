@@ -97,4 +97,46 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// Update employee details and optionally their salary structure
+router.patch('/:id', verifyToken, async (req, res) => {
+  try {
+    const { baseSalary, paymentFrequency, deductions, ...updateData } = req.body;
+
+    // 1. Update the employee details
+    const updatedEmployee = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData }, 
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!updatedEmployee) {
+      return res.status(404).json({ success: false, error: 'Employee not found' });
+    }
+
+    // 2. Automatically save or update their salary record if baseSalary is provided
+    if (baseSalary) {
+      const resolvedCompanyId = updatedEmployee.companyId || req.user?.companyId || req.body.companyId;
+
+      await Salary.findOneAndUpdate(
+        { employee: updatedEmployee._id },
+        {
+          baseSalary: Number(baseSalary),
+          paymentFrequency: paymentFrequency || 'Monthly',
+          deductions: deductions || [],
+          companyId: resolvedCompanyId
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Employee and salary updated successfully', 
+      data: updatedEmployee 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
