@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/user');
 const Payroll = require('../models/payroll');
 const Salary = require('../models/salary');
 const { verifyToken, isAdmin } = require('../middleware/auth');
@@ -10,7 +11,6 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
     const { employee, payperiod, baseSalary, deductions, tax, extras } = req.body;
     const companyId = req.user.companyId;
 
-    // SCENARIO A: Bulk generate for ALL employees if no single employee ID is provided
     if (!employee) {
       const allSalaries = await Salary.find({ companyId });
       if (!allSalaries || allSalaries.length === 0) {
@@ -48,7 +48,6 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
       });
     }
 
-    // SCENARIO B: Generate or Update for a SINGLE employee
     let salaryRecord = await Salary.findOne({ employee });
     const base = Number(baseSalary) || Number(salaryRecord?.baseSalary) || 0;
     const itemizedDeductions = deductions !== undefined ? Number(deductions) : (salaryRecord?.deductions ? salaryRecord.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) : 0);
@@ -80,64 +79,66 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Get all salary/payroll records with full frontend key compatibility and deduction calculations
+// Get all employee payroll records
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    // 1. Fetch all salaries and populate employees safely using .lean()
-    const salaries = await Salary.find({ companyId: req.user.companyId })
-      .populate('employee', 'name email employeeId department jobTitle')
-      .lean();
+    const companyId = req.user.companyId;
 
-    // Filter out orphaned records where the employee document was deleted
-    const validSalaries = salaries.filter(sal => sal.employee != null);
+    const employees = await User.find({ companyId, role: { $ne: 'Admin' } }).lean();
+    const salaries = await Salary.find({ companyId }).lean();
+    const payrollRecords = await Payroll.find({ companyId }).lean();
 
-    // 2. Fetch all saved Payroll calculation instances for this company
-    const payrollRecords = await Payroll.find({ companyId: req.user.companyId }).lean();
+    const salaryMap = new Map();
+    salaries.forEach(s => {
+      if (s.employee) salaryMap.set(s.employee.toString(), s);
+    });
+
     const payrollMap = new Map();
     payrollRecords.forEach(p => {
       if (p.employee) payrollMap.set(p.employee.toString(), p);
     });
 
-    // 3. Map data, combining salary configuration deductions with modal overrides
-    const enrichedData = validSalaries.map(sal => {
-      const empId = sal.employee._id.toString();
+    const enrichedData = employees.map(emp => {
+      const empId = emp._id.toString();
+      const salaryMatch = salaryMap.get(empId);
       const payrollMatch = payrollMap.get(empId);
 
-      const base = Number(sal.baseSalary || 0);
+      const base = Number(salaryMatch?.baseSalary || payrollMatch?.baseSalary || 0);
       
-      // Calculate itemized deductions from the Salary document array
-      const salaryDeductions = sal.deductions && Array.isArray(sal.deductions) 
-        ? sal.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) 
-        : Number(sal.deductions || 0);
+      const salaryDeductions = salaryMatch?.deductions && Array.isArray(salaryMatch.deductions) 
+        ? salaryMatch.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) 
+        : Number(salaryMatch?.deductions || 0);
 
       const extras = Number(payrollMatch?.extras || 0);
       const tax = Number(payrollMatch?.tax || 0);
-      const payrollDeductions = Number(payrollMatch?.totalDeductions || payrollMatch?.deductions || 0);
+      const payrollDeductions = Number(payrollMatch?.totalDeductions || 0);
 
-      // Total deductions combines salary itemized deductions + payroll deductions + tax
       const totalDeductions = payrollDeductions > 0 ? payrollDeductions : (salaryDeductions + tax);
-      
       const grossPay = Number(payrollMatch?.grossPay ?? (base + extras));
       const finalCalculatedPay = Number(payrollMatch?.netPay ?? (grossPay - totalDeductions));
 
       return {
-        _id: payrollMatch?._id || sal._id,
-        employee: sal.employee,
-        // Provide every variation of property names for the frontend table view
+        _id: payrollMatch?._id || salaryMatch?._id || emp._id,
+        employee: {
+          _id: emp._id,
+          name: emp.name,
+          email: emp.email,
+          employeeId: emp.employeeId || '',
+          department: emp.department || 'General',
+          jobTitle: emp.jobTitle || emp.role
+        },
         baseSalary: finalCalculatedPay,
         currentSalary: finalCalculatedPay,
         netPay: finalCalculatedPay,
         rawBaseSalary: base,
         grossPay,
         totalDeductions,
-        // Added payperiod and month fields so the modal dropdown displays correctly
         payperiod: payrollMatch?.payperiod || 'Current',
         month: payrollMatch?.month || payrollMatch?.payperiod || 'Current',
         status: payrollMatch?.status || 'Unpaid'
       };
     });
 
-    // 4. Calculate overall summary metrics accurately across all employees
     const summary = enrichedData.reduce((acc, curr) => {
       acc.totalGross += Number(curr.grossPay || 0);
       acc.totalDeductions += Number(curr.totalDeductions || 0);
@@ -164,7 +165,7 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Update Payroll Payment Status (e.g., Mark as Paid)
+// Update Payroll Payment Status
 router.patch('/:id/payment', verifyToken, isAdmin, async (req, res) => {
   try {
     const { status } = req.body;
@@ -184,7 +185,7 @@ router.patch('/:id/payment', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Update or create payroll record by ID or create if missing (Fixes frontend modal save error)
+// Update or create payroll record by ID
 router.patch('/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params;
