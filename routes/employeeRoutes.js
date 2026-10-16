@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/user');
+const Salary = require('../models/salary');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 
 // Get all employees for the logged-in user's company only
@@ -80,13 +81,16 @@ router.patch('/:id', verifyToken, async (req, res) => {
 
     // 2. Automatically save or update their salary record if baseSalary is provided
     if (baseSalary) {
+      // Fallback chain for companyId to ensure it's never missing
+      const resolvedCompanyId = updatedEmployee.companyId || req.user?.companyId || req.body.companyId;
+
       await Salary.findOneAndUpdate(
         { employee: updatedEmployee._id },
         {
           baseSalary,
           paymentFrequency: paymentFrequency || 'Monthly',
           deductions: deductions || [],
-          companyId: updatedEmployee.companyId || req.user.companyId
+          companyId: resolvedCompanyId
         },
         { upsert: true, new: true }
       );
