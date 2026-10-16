@@ -80,7 +80,7 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Get all salary/payroll records safely (filters orphaned employee refs and computes itemized deductions & net pay)
+// Get all salary/payroll records with full frontend key compatibility and deduction calculations
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
     // 1. Fetch all salaries and populate employees safely using .lean()
@@ -105,7 +105,7 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
 
       const base = Number(sal.baseSalary || 0);
       
-      // Calculate itemized deductions from the Salary document array (e.g. major adjustments)
+      // Calculate itemized deductions from the Salary document array
       const salaryDeductions = sal.deductions && Array.isArray(sal.deductions) 
         ? sal.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) 
         : Number(sal.deductions || 0);
@@ -118,16 +118,18 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
       const totalDeductions = payrollDeductions > 0 ? payrollDeductions : (salaryDeductions + tax);
       
       const grossPay = Number(payrollMatch?.grossPay ?? (base + extras));
-      const netPay = Number(payrollMatch?.netPay ?? (grossPay - totalDeductions));
+      const finalCalculatedPay = Number(payrollMatch?.netPay ?? (grossPay - totalDeductions));
 
       return {
         _id: payrollMatch?._id || sal._id,
         employee: sal.employee,
-        baseSalary: netPay, // Reflects the exact Net Pay (after all itemized deductions) in the Current Salary column
+        // Provide every variation of property names for the frontend table view
+        baseSalary: finalCalculatedPay,
+        currentSalary: finalCalculatedPay,
+        netPay: finalCalculatedPay,
         rawBaseSalary: base,
         grossPay,
         totalDeductions,
-        netPay,
         status: payrollMatch?.status || 'Unpaid'
       };
     });
@@ -147,7 +149,10 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
         employeeCount: enrichedData.length,
         totalGrossPay: summary.totalGross,
         totalDeductions: summary.totalDeductions,
-        totalNetPay: summary.totalNet
+        totalNetPay: summary.totalNet,
+        totalNet: summary.totalNet,
+        totalPayroll: summary.totalNet,
+        payrollTotal: summary.totalNet
       },
       data: enrichedData
     });
