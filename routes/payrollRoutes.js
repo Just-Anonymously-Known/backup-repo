@@ -59,7 +59,6 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
     const totalDeductionsVal = itemizedDeductions + taxAmount;
     const netPay = grossPay - totalDeductionsVal;
 
-    // Upsert ensures it updates if it exists or creates it if it doesn't (preventing "not found" errors)
     let payrollRecord = await Payroll.findOneAndUpdate(
       { employee, companyId },
       {
@@ -81,33 +80,62 @@ router.post('/generate', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Get all salary/payroll records for the company to display on the dashboard
+// Get all salary/payroll records with computed net pay for the dashboard
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    // Fetch all salary structures tied to this company so every employee appears
+    // 1. Fetch all salaries and populate employees so every employee appears in the table
     const salaries = await Salary.find({ companyId: req.user.companyId })
       .populate('employee', 'name email employeeId department jobTitle');
 
-    // Calculate summary metrics based on the salary records
-    const summary = salaries.reduce((acc, curr) => {
-      const base = Number(curr.baseSalary || 0);
-      const deductions = curr.deductions ? curr.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) : 0;
-      acc.totalGross += base;
-      acc.totalDeductions += deductions;
-      acc.totalNet += (base - deductions);
+    // 2. Fetch any existing generated payroll calculations for this company
+    const payrollRecords = await Payroll.find({ companyId: req.user.companyId });
+    const payrollMap = new Map();
+    payrollRecords.forEach(p => payrollMap.set(p.employee.toString(), p));
+
+    // 3. Map salaries to include calculated net pay/payroll data for frontend display
+    const enrichedData = salaries.map(sal => {
+      const empId = sal.employee?._id?.toString();
+      const payrollMatch = empId ? payrollMap.get(empId) : null;
+
+      const base = Number(sal.baseSalary || 0);
+      const salaryDeductions = sal.deductions ? sal.deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0) : 0;
+      
+      const extras = Number(payrollMatch?.extras || 0);
+      const tax = Number(payrollMatch?.tax || 0);
+      
+      const grossPay = payrollMatch?.grossPay || (base + extras);
+      const totalDeductions = payrollMatch?.totalDeductions || (salaryDeductions + tax);
+      const netPay = payrollMatch?.netPay || (grossPay - totalDeductions);
+
+      return {
+        _id: payrollMatch?._id || sal._id,
+        employee: sal.employee,
+        baseSalary: base,
+        grossPay,
+        totalDeductions,
+        netPay,
+        status: payrollMatch?.status || 'Unpaid'
+      };
+    });
+
+    // 4. Calculate overall summary metrics for the top dashboard card
+    const summary = enrichedData.reduce((acc, curr) => {
+      acc.totalGross += Number(curr.grossPay || 0);
+      acc.totalDeductions += Number(curr.totalDeductions || 0);
+      acc.totalNet += Number(curr.netPay || 0);
       return acc;
     }, { totalGross: 0, totalDeductions: 0, totalNet: 0 });
 
     res.status(200).json({
       success: true,
-      count: salaries.length,
+      count: enrichedData.length,
       summary: {
-        employeeCount: salaries.length,
+        employeeCount: enrichedData.length,
         totalGrossPay: summary.totalGross,
         totalDeductions: summary.totalDeductions,
         totalNetPay: summary.totalNet
       },
-      data: salaries
+      data: enrichedData
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -140,13 +168,11 @@ router.patch('/:id', verifyToken, isAdmin, async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
-    // Check if the id passed is a valid MongoDB ObjectId or an employee reference
     let updatedPayroll = await Payroll.findByIdAndUpdate(id, updates, { 
       new: true, 
       runValidators: true 
     });
 
-    // If not found by Payroll ID, check if 'id' is actually an employee ID and upsert
     if (!updatedPayroll) {
       updatedPayroll = await Payroll.findOneAndUpdate(
         { employee: id, companyId: req.user.companyId },
