@@ -134,24 +134,30 @@ router.patch('/:id/payment', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Update/Patch payroll record by ID (Fixes frontend editing error)
+// Update or create payroll record by ID or create if missing (Fixes frontend modal save error)
 router.patch('/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
 
-    const updatedPayroll = await Payroll.findByIdAndUpdate(id, updates, { 
+    // Check if the id passed is a valid MongoDB ObjectId or an employee reference
+    let updatedPayroll = await Payroll.findByIdAndUpdate(id, updates, { 
       new: true, 
       runValidators: true 
     });
 
+    // If not found by Payroll ID, check if 'id' is actually an employee ID and upsert
     if (!updatedPayroll) {
-      return res.status(404).json({ success: false, error: 'Payroll record not found' });
+      updatedPayroll = await Payroll.findOneAndUpdate(
+        { employee: id, companyId: req.user.companyId },
+        updates,
+        { new: true, upsert: true, runValidators: true }
+      );
     }
 
     res.status(200).json({ 
       success: true, 
-      message: 'Payroll updated successfully', 
+      message: 'Payroll saved successfully', 
       data: updatedPayroll 
     });
   } catch (error) {
