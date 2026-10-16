@@ -23,6 +23,7 @@ const userRoutes = require('./routes/userRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const salaryRoutes = require('./routes/salaryRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes'); // <-- Added dashboard stats routes
 
 // Import models and middleware needed for announcements
 const Message = require('./models/Message');
@@ -35,6 +36,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/salary', salaryRoutes);
 app.use('/api/payroll', payrollRoutes);
+app.use('/api/dashboard', dashboardRoutes); // <-- Mount dashboard stats endpoint (/api/dashboard/stats)
+app.use('/api', dashboardRoutes);          // <-- Fallback alias so /api/stats is also accessible
 
 app.post('/api/announcements', verifyToken, async (req, res) => {
   try {
@@ -64,6 +67,7 @@ app.post('/api/announcements', verifyToken, async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 // Test Route
 app.get('/', (req, res) => {
   res.send('HR Tech MVP Backend is running...');

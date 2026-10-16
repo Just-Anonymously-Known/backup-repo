@@ -130,6 +130,9 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
         rawBaseSalary: base,
         grossPay,
         totalDeductions,
+        // Added payperiod and month fields so the modal dropdown displays correctly
+        payperiod: payrollMatch?.payperiod || 'Current',
+        month: payrollMatch?.month || payrollMatch?.payperiod || 'Current',
         status: payrollMatch?.status || 'Unpaid'
       };
     });
