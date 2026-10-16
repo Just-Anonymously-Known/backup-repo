@@ -64,43 +64,34 @@ router.get('/:id', verifyToken, async (req, res) => {
 });
 
 
-router.patch('/:id', verifyToken, async (req, res) => {
+router.post('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const { baseSalary, paymentFrequency, deductions, ...updateData } = req.body;
+    const { employee, baseSalary, deductions, paymentFrequency } = req.body;
+    const companyId = req.user.companyId;
 
-    // 1. Update the employee details
-    const updatedEmployee = await User.findByIdAndUpdate(
-      req.params.id,
-      { $set: updateData }, 
-      { new: true, runValidators: true }
-    ).select('-password');
-
-    if (!updatedEmployee) {
-      return res.status(404).json({ success: false, error: 'Employee not found' });
+    if (!companyId) {
+      return res.status(400).json({ success: false, error: 'companyId is required' });
     }
 
-    // 2. Automatically save or update their salary record if baseSalary is provided
-    if (baseSalary) {
-      // Fallback chain for companyId to ensure it's never missing
-      const resolvedCompanyId = updatedEmployee.companyId || req.user?.companyId || req.body.companyId;
-
-      await Salary.findOneAndUpdate(
-        { employee: updatedEmployee._id },
-        {
-          baseSalary,
-          paymentFrequency: paymentFrequency || 'Monthly',
-          deductions: deductions || [],
-          companyId: resolvedCompanyId
-        },
-        { upsert: true, new: true }
-      );
+    let salaryRecord = await Salary.findOne({ employee });
+    if (salaryRecord) {
+      salaryRecord.baseSalary = baseSalary || salaryRecord.baseSalary;
+      salaryRecord.deductions = deductions || salaryRecord.deductions;
+      salaryRecord.paymentFrequency = paymentFrequency || salaryRecord.paymentFrequency;
+      salaryRecord.companyId = salaryRecord.companyId || companyId;
+      await salaryRecord.save();
+      return res.status(200).json({ success: true, message: 'Salary updated successfully', data: salaryRecord });
     }
 
-    res.status(200).json({ 
-      success: true, 
-      message: 'Employee and salary updated successfully', 
-      data: updatedEmployee 
+    salaryRecord = await Salary.create({
+      employee,
+      companyId,
+      baseSalary: Number(baseSalary),
+      deductions,
+      paymentFrequency
     });
+
+    res.status(201).json({ success: true, data: salaryRecord });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
